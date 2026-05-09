@@ -96,10 +96,11 @@ gcc test-suit/starryos/normal/qemu-smp1/<test-name>/c/src/main.c -o /tmp/a.out &
 2. Branch naming: Bugfix → `fix/<name>`, Feature → `feat/<name>`
 3. PR target: `upstream/dev` (rcore-os/tgoskits)
 4. Before PR: `pre-commit-agent` must pass
+5. Never add `Co-Authored-By` trailers — commits are authored by the human developer only
 
 ## Coding Conventions
 
 - **Test-first**: Write C test cases that validate Linux behavior before fixing StarryOS
 - **Linux parity**: StarryOS should match Linux syscall behavior (error codes, edge cases)
-- **PR structure**: Follow `templates/pr-bugfix.md` or `templates/pr-feature.md`
+- **PR structure**: Follow `templates/pr-bugfix.md` or `templates/pr-feature.md`. Never include AI-branding lines. Always fill in actual code diffs and test results from `outputs/`.
 - **Rust conventions**: `AxError::from(LinuxError::XXX)` for error mapping
