@@ -47,8 +47,8 @@ int main() {
     // Test: With directories
     // Test: With pipes
 
-    printf("\\n------------------------------------------------\\n");
-    printf("  DONE: N pass, M fail\\n");
+    printf("\n------------------------------------------------\n");
+    printf("  DONE: N pass, M fail\n");
     return 0;
 }
 ```

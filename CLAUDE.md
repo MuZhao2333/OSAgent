@@ -2,7 +2,9 @@
 
 ## Project Purpose
 
-This project provides a structured framework for debugging, feature development, and maintenance of **StarryOS** (a Rust-based OS kernel) via the tgoskits test suite. It defines workflows, agents, commands, and templates to make StarryOS development systematic and reproducible.
+This project provides a structured framework for debugging, feature development, and maintenance of **StarryOS** (a Rust-based OS kernel) via the tgoskits test suite. It defines agents and templates to make StarryOS development systematic and reproducible.
+
+Architecture is entirely agent-driven: three main workflow agents (debug, busybox, feature) call sub-agents (git-sync, code-explorer, test-runner, test-agent, pre-commit, pr-writer) at the appropriate workflow steps. Each sub-agent has a narrow, context-bounded job so the main agent stays lean.
 
 ## Git Remotes
 
@@ -19,13 +21,12 @@ This project provides a structured framework for debugging, feature development,
 | `tgoskits/os/StarryOS/` | StarryOS kernel source |
 | `tgoskits/test-suit/starryos/` | Test cases for StarryOS |
 | `.claude/agents/` | Custom Claude Code agents |
-| `.claude/commands/` | Custom slash commands |
 | `docs/` | Workflow and environment documentation |
 | `templates/` | PR and test case templates |
 
 ## Git Workflow Rules
 
-**Before starting any work, always run `/start-work`** to ensure:
+**Every main agent starts by calling `git-sync-agent`** to ensure:
 
 1. Working tree is clean
 2. On `dev` branch, and local `dev` == `origin/dev` == `upstream/dev`
@@ -37,71 +38,77 @@ This project provides a structured framework for debugging, feature development,
 
 ### PR Target
 - All PRs target `upstream/dev` (rcore-os/tgoskits)
-- Before creating PR, rebase onto latest `upstream/dev`: `git fetch upstream && git rebase upstream/dev`
-- Use `/open-pr` to push and create the PR
+- Before creating PR, `pr-writer` agent rebases onto latest `upstream/dev`
 
 ## Environment: How to Run Code
 
-All commands are executed from the `tgoskits/` directory using `cargo xtask`:
+All commands are executed from the `tgoskits/` directory.
 
+**Critical**: `cargo xtask starry` commands (build, test qemu) **must** run inside the Docker container `starryos-dev:ubuntu-qemu10.2.1`. The container provides the riscv64 toolchain and QEMU runtime.
+
+Commands that run directly on WSL (no Docker needed): `cargo fmt`, `cargo xtask clippy`, `cargo xtask sync-lint`, `cargo xtask test` (std tests), `gcc`, `busybox`, `sh`.
+
+### Enter Docker Container
 ```bash
 cd tgoskits
+docker run -it --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1
 ```
 
-### Pre-Commit Checks (Lightweight CI)
-Run these before every commit — fast, no QEMU needed:
-
+### Run a Single Test (Docker required)
 ```bash
-cargo fmt --all -- --check    # Code formatting
-cargo xtask clippy             # Rust linting
-cargo xtask sync-lint          # Sync/Mutex usage checks
-cargo xtask test               # Unit tests (std)
+cd tgoskits && docker run --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask starry test qemu --arch riscv64 -c <test-name>
 ```
 
-One-liner: `cargo fmt --all -- --check && cargo xtask clippy && cargo xtask sync-lint && cargo xtask test`
-
-### Run a Single Test
+### Build StarryOS (Docker required)
 ```bash
-cargo xtask starry test qemu --arch riscv64 -c <test-name>
-```
-Example: `cargo xtask starry test qemu --arch riscv64 -c test-pipe-syscall`
-
-### Build StarryOS
-```bash
-cargo xtask starry build --arch riscv64
+cd tgoskits && docker run --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask starry build --arch riscv64
 ```
 
-### Run Linux Baseline (for comparison)
+### Run Linux Baseline (for comparison, no Docker needed)
 ```bash
-# Compile and run the C test case directly on WSL
 gcc test-suit/starryos/normal/qemu-smp1/<test-name>/c/src/main.c -o /tmp/a.out && /tmp/a.out
 ```
 
+## Agent Architecture
+
+### Main Workflow Agents
+
+| Agent | Trigger | Sub-agents called |
+|-------|---------|-------------------|
+| `debug-agent` | "fix the truncate bug", "debug test failure" | git-sync → test-runner → code-explorer → test-runner → pre-commit → pr-writer |
+| `busybox-agent` | "fix busybox hwclock" | git-sync → test-runner → code-explorer → test-runner → pre-commit → pr-writer |
+| `feature-agent` | "add mmap support" | git-sync → code-explorer → test-agent → test-runner → pre-commit → pr-writer |
+
+### Supporting Sub-Agents (called by main agents)
+
+| Agent | Purpose | Context risk |
+|-------|---------|-------------|
+| `git-sync-agent` | Sync dev with upstream, create work branch | Low — simple git operations |
+| `code-explorer-agent` | Research Linux behavior, search kernel source, trace impl paths, strace profiles | **Absorbs heavy code reading** |
+| `test-runner-agent` | Run tests (Linux baseline or Docker QEMU), parse output, return PASS/FAIL summary | **Absorbs QEMU boot logs** |
+| `test-agent` | Write C test cases (delegates research + execution to sub-agents) | Low — focused on writing test code |
+| `pre-commit-agent` | Run fmt + clippy + sync-lint + std tests | Low — output is short |
+| `pr-writer` | Compose structured PR, rebase, push, create PR | Low — template-based |
+
 ## Workflow Overview
 
-### Debug Workflow
-0. **`/start-work`** — sync dev, create `fix/<name>` branch
-1. Identify the bug location in StarryOS source
-2. Write/update a C test case in `tgoskits/test-suit/starryos/`
-3. Run baseline on Linux/WSL: `gcc test.c && ./a.out`
-4. Run in StarryOS QEMU: `cargo xtask starry test qemu --arch riscv64 -c <test-name>`
-5. Compare results: identify mismatched error codes and behaviors
-6. Fix the kernel code
-7. Rebuild and re-test until all tests pass
-8. **`/pre-commit`** — run fmt, clippy, sync-lint, std tests
-9. Commit the fix
-10. **`/open-pr`** — rebase onto upstream/dev, push, create PR to upstream/dev
+### 1. Bug Fix (debug-agent)
+```
+git-sync-agent → test-runner (baseline + QEMU) → code-explorer (trace + research)
+→ implement fix → test-runner (verify) → pre-commit-agent → pr-writer
+```
 
-### Feature Development Workflow
-0. **`/start-work`** — sync dev, create `feat/<name>` branch
-1. Design the feature and identify affected syscalls/modules
-2. Check Linux behavior for the expected API contract
-3. Write test cases first (TDD)
-4. Implement in StarryOS kernel
-5. Verify against Linux baseline
-6. **`/pre-commit`** — run fmt, clippy, sync-lint, std tests
-7. Commit
-8. **`/open-pr`** — rebase onto upstream/dev, push, create PR to upstream/dev
+### 2. Busybox Fix (busybox-agent)
+```
+git-sync-agent → grep + fetch test → append to script → test-runner (baseline + QEMU)
+→ code-explorer (strace + trace) → fix → test-runner (verify) → pre-commit-agent → pr-writer
+```
+
+### 3. Feature Development (feature-agent)
+```
+git-sync-agent → code-explorer (research spec) → design → test-agent (write tests)
+→ implement → test-runner (QEMU) → pre-commit-agent → pr-writer
+```
 
 ### Test Suite Structure
 ```

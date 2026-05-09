@@ -1,16 +1,20 @@
 ---
 name: pr-writer
-description: StarryOS PR writer — compose structured bugfix or feature PRs following the project template
+description: StarryOS PR writer — compose structured bugfix or feature PRs, rebase onto upstream/dev, push, and create PR via gh CLI. Called by workflow agents when work is complete.
 tools: Read, Bash, Edit, Write, Grep
 ---
 
 # PR Writer Agent
 
-You are a PR writer for StarryOS. Your job is to compose well-structured pull requests following the project's convention.
+You are a PR writer for StarryOS. Your job is to compose well-structured pull requests, rebase onto upstream/dev, push, and create the PR via `gh` CLI. Called by workflow agents after pre-commit checks pass.
 
-## PR Structure (Bug Fix)
+## Process
 
-Every bug fix PR must follow this exact structure:
+### Step 1: Compose the PR Body
+
+Follow the appropriate template below.
+
+#### Bug Fix PR Structure (11 sections)
 
 ```markdown
 ## Bug: <syscall_name> — <one-line summary of the issue>
@@ -32,9 +36,9 @@ what the incorrect behavior is, and what Linux does instead.>
 
 **修复前 (Before):**
 
-\`\`\`rust
+```rust
 // original broken code
-\`\`\`
+```
 
 ### 根因分析 (Root Cause Analysis)
 
@@ -56,30 +60,30 @@ what the incorrect behavior is, and what Linux does instead.>
 
 ### 修改前测试结果 (Before Test Results - StarryOS QEMU)
 
-\`\`\`text
+```text
 // Test output showing failures (FAIL lines highlighted)
-\`\`\`
+```
 
 ### 期望行为 (Expected Behavior - Linux/WSL Baseline)
 
-\`\`\`text
+```text
 // Test output from Linux showing all PASS
-\`\`\`
+```
 
 ### 修复 (Fix)
 
-\`\`\`rust
+```rust
 // fixed code
-\`\`\`
+```
 
 ### 修复后测试结果 (After Test Results - StarryOS QEMU)
 
-\`\`\`text
+```text
 // Test output showing all PASS after fix
-\`\`\`
+```
 ```
 
-## PR Structure (Feature)
+#### Feature PR Structure (5 sections)
 
 ```markdown
 ## Feature: <feature-name>
@@ -98,4 +102,29 @@ what the incorrect behavior is, and what Linux does instead.>
 
 ### Linux Parity
 <How this matches Linux behavior>
+```
+
+### Step 2: Rebase onto upstream/dev
+
+```bash
+cd tgoskits && git fetch upstream && git rebase upstream/dev
+```
+
+### Step 3: Push Branch
+
+```bash
+cd tgoskits && git push origin HEAD
+```
+
+### Step 4: Create PR
+
+```bash
+cd tgoskits && gh pr create \
+  --base dev \
+  --repo rcore-os/tgoskits \
+  --title "<title>" \
+  --body "$(cat <<'EOF'
+<PR body from Step 1>
+EOF
+)"
 ```

@@ -9,20 +9,16 @@ OSAgent/
 ├── CLAUDE.md                    # Claude Code 自动加载的项目上下文
 ├── README.md                    # 本文件
 ├── .claude/
-│   ├── agents/                  # 自定义 Agent
-│   │   ├── debug-agent.md       #   调试 Agent
-│   │   ├── feature-agent.md     #   功能开发 Agent
-│   │   ├── test-agent.md        #   测试 Agent
-│   │   └── pr-writer.md         #   PR 撰写 Agent
-│   └── commands/                # 自定义 Slash Commands
-│       ├── start-work.md        #   /start-work — 同步 git，创建开发分支
-│       ├── pre-commit.md         #   /pre-commit — 提交前轻量 CI
-│       ├── debug.md             #   /debug — 调试 StarryOS bug
-│       ├── test.md              #   /test — 创建测试用例
-│       ├── build.md             #   /build — 构建内核
-│       ├── run-test.md          #   /run-test — 运行 QEMU 测试
-│       ├── pr.md                #   /pr — 撰写 PR
-│       └── open-pr.md           #   /open-pr — Push 并创建 PR
+│   └── agents/                  # 自定义 Agent
+│       ├── debug-agent.md       #   调试 Agent（主）
+│       ├── busybox-agent.md     #   Busybox 调试 Agent（主）
+│       ├── feature-agent.md     #   功能开发 Agent（主）
+│       ├── git-sync-agent.md    #   Git 同步子 Agent
+│       ├── code-explorer-agent.md # 代码探索子 Agent（研究+追踪）
+│       ├── test-runner-agent.md #  测试运行子 Agent（Linux + QEMU）
+│       ├── test-agent.md        #   测试编写 Agent
+│       ├── pre-commit-agent.md  #   提交前 CI 子 Agent
+│       └── pr-writer.md         #   PR 撰写+发布子 Agent
 ├── docs/
 │   ├── environment.md           # Docker/QEMU 环境配置说明
 │   └── workflow.md              # 工作流快速参考
@@ -43,10 +39,10 @@ OSAgent/
 
 ### Git 规范
 
-1. **开始工作前**: `/start-work` — 确保 `local/dev` = `origin/dev` = `upstream/dev`，再从 `dev` 开新分支
+1. **开始工作前**: 主 agent 调用 `git-sync-agent` — 确保 `local/dev` = `origin/dev` = `upstream/dev`，再从 `dev` 开新分支
 2. **分支命名**: Bugfix → `fix/<name>`，Feature → `feat/<name>`
-3. **PR 目标**: 所有 PR 提交到 `upstream/dev` (rcore-os/tgoskits)
-4. **提 PR 前**: rebase 到最新 `upstream/dev`，通过 `/pre-commit`
+3. **PR 目标**: 所有 PR 由 `pr-writer` 提交到 `upstream/dev` (rcore-os/tgoskits)
+4. **提 PR 前**: `pr-writer` rebase 到最新 `upstream/dev`，`pre-commit-agent` 通过 CI
 
 ## 准备工作
 
@@ -79,71 +75,65 @@ docker run -it --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qem
 cargo xtask starry test qemu --arch riscv64 -c <test-name>
 ```
 
-### Slash Commands
-
-| 命令 | 用途 |
-|------|------|
-| `/start-work` | 同步 git (local=origin=upstream), 创建 fix/feat 分支 |
-| `/pre-commit` | 提交前轻量 CI 检查 (fmt, clippy, sync-lint, std test) |
-| `/debug <bug-name>` | 分析并修复 StarryOS bug |
-| `/test <syscall>` | 为 syscall 创建 C 测试用例 |
-| `/run-test <test-name>` | 在 QEMU 中运行测试 |
-| `/build` | 重新构建 StarryOS 内核 |
-| `/pr` | 撰写结构化 PR |
-| `/open-pr` | Push 分支并创建 PR 到 upstream/dev |
-
-### Agents
+### 主 Agent (描述任务即可自动调用)
 
 | Agent | 用途 |
 |-------|------|
-| `debug-agent` | 系统化定位、分析和修复 kernel bug |
-| `feature-agent` | 设计和实现新的 syscall 或内核功能 |
-| `test-agent` | 编写 C 测试用例，对比 Linux vs StarryOS 行为 |
-| `pr-writer` | 按项目模板撰写结构化 PR |
+| `debug-agent` | **Bug 修复**: 基线 → 追踪 → 修复 → 验证 → PR |
+| `busybox-agent` | **Busybox 修复**: 取测试 → 脚本 → 基线 → strace → 修复 |
+| `feature-agent` | **功能开发**: 研究 → 设计 → TDD 写测试 → 实现 → 验证 |
+
+### 子 Agent (由主 Agent 自动调用)
+
+| Agent | 用途 | 吸收的上下文 |
+|-------|------|-------------|
+| `git-sync-agent` | 同步 dev, 创建工作分支 | — |
+| `code-explorer-agent` | 研究 Linux 行为, 追踪内核实现, strace 分析 | **大量代码阅读** |
+| `test-runner-agent` | 运行测试 (Linux/QEMU), 返回 PASS/FAIL 摘要 | **QEMU 启动日志** |
+| `test-agent` | 编写 C 测试用例 | — |
+| `pre-commit-agent` | fmt + clippy + sync-lint + std test | — |
+| `pr-writer` | 撰写 PR, rebase, push, 创建 PR | — |
 
 ## 典型工作流
 
-### Bug 修复
+### Bug 修复 (debug-agent)
 ```
-/start-work          → 同步 git, 创建 fix/<name> 分支
-/test <syscall>      → 编写测试用例
-Run on Linux         → 建立基线
-/run-test <name>     → 在 StarryOS 运行，观察失败项
-/debug <name>        → 分析根因，修复代码
-/build               → 重新构建
-/run-test <name>     → 验证修复 (全部 PASS)
-/pre-commit          → fmt + clippy + sync-lint + std test
-Commit               → 提交
-/open-pr             → Push + 创建 PR 到 upstream/dev
+git-sync-agent         → 同步 git, 创建 fix/<name> 分支
+test-runner-agent      → Linux 基线 (WSL)
+test-runner-agent      → StarryOS QEMU 确认失败
+code-explorer-agent    → 研究 Linux spec + 追踪内核实现 + 定位根因
+  (main agent 实施修复)
+test-runner-agent      → 验证修复 (Docker QEMU)
+pre-commit-agent       → CI 检查
+pr-writer              → 提交, PR, push
 ```
 
-### 功能开发
+### Busybox Bugfix (busybox-agent)
 ```
-/start-work          → 同步 git, 创建 feat/<name> 分支
-Research Linux       → 查阅 man pages，了解预期行为
-/test <syscall>      → 先写测试 (TDD)
-feature-agent        → 在 StarryOS 中实现
-/build && /run-test  → QEMU 验证
-/pre-commit          → fmt + clippy + sync-lint + std test
-Commit               → 提交
-/open-pr             → Push + 创建 PR 到 upstream/dev
+git-sync-agent         → 同步 git, 创建 fix/<name> 分支
+  (main agent: grep + fetch issue + 追加测试)
+test-runner-agent      → WSL 基线
+test-runner-agent      → QEMU 确认失败
+code-explorer-agent    → strace + 追踪内核 + 定位修复
+  (main agent 实施修复)
+test-runner-agent      → 验证修复
+pre-commit-agent       → CI 检查
+pr-writer              → 提交, PR, push
 ```
 
-## PR 模板结构
-
-Bug 修复 PR 包含 11 个部分：
-1. Bug 总结 → 2. 发现路径 → 3. Bug 位置表 → 4. 修复前代码 → 5. 根因分析 → 6. 影响范围 → 7. 测例路径 → 8. 修复前测试结果 → 9. 期望行为( Linux 基线 ) → 10. 修复代码 → 11. 修复后测试结果
-
-详见 `templates/pr-bugfix.md`。
+### 功能开发 (feature-agent)
+```
+git-sync-agent         → 同步 git, 创建 feat/<name> 分支
+code-explorer-agent    → 研究 Linux 行为
+  (main agent: 设计)
+test-agent             → 写测试用例
+  (main agent: 实现)
+test-runner-agent      → 构建 + QEMU 测试
+pre-commit-agent       → CI 检查
+pr-writer              → 提交, PR, push
+```
 
 ## Claude Code 插件
-
-### 已注册 Marketplace
-
-| Marketplace | 来源 | 添加方式 |
-|---|---|---|
-| `claude-plugins-official` | `anthropics/claude-plugins-official` | 系统预置 |
-| `anthropic-agent-skills` | `anthropics/skills` | `/plugin marketplace add anthropics/skills` |
 
 ### 已安装插件
 
@@ -154,17 +144,3 @@ Bug 修复 PR 包含 11 个部分：
 | `github@claude-plugins-official` | 官方 | GitHub 操作 |
 | `code-simplifier@claude-plugins-official` | 官方 | 代码简化 |
 | `rust-analyzer-lsp@claude-plugins-official` | 官方 | Rust LSP 支持 |
-
-### 复现步骤
-
-```bash
-# 1. 添加 marketplace
-/plugin marketplace add anthropics/skills
-
-# 2. 浏览并安装插件
-/plugin browse claude-plugins-official
-#   → 依次安装: skill-creator, code-review, github, code-simplifier, rust-analyzer-lsp
-
-# 3. 重载
-/reload-plugins
-```
