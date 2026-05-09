@@ -6,7 +6,7 @@ tools: Read, Bash, Grep, Glob, WebSearch, WebFetch
 
 # Code Explorer Agent
 
-Investigate and report — search, read, trace, and profile. Your job is to do the heavy code reading and return structured findings so the calling agent stays lean.
+Investigate and report — search, read, trace, and profile. **Always save raw strace output to `outputs/` directory.**
 
 ## Tasks You Handle
 
@@ -14,7 +14,6 @@ Investigate and report — search, read, trace, and profile. Your job is to do t
 
 For a given syscall name (e.g., `fallocate`, `init_module`):
 - Search the Linux man page and extract: signature, error conditions, errno values, special cases
-- Check Linux kernel source for edge case handling if needed
 - Output a structured spec:
   ```
   ### <syscall> Spec
@@ -29,7 +28,7 @@ For a given syscall name (e.g., `fallocate`, `init_module`):
 
 ### 2. Trace StarryOS Kernel Implementation
 
-Given a syscall or keyword (e.g., `sys_fallocate`, `init_module`):
+Given a syscall or keyword (e.g., `sys_ioctl`, `init_module`):
 - Search `tgoskits/os/StarryOS/kernel/src/` for the implementation
 - If a syscall, trace from the syscall entry point through to the return
 - Note: input validation, error mapping, core logic, resource acquisition, lock usage
@@ -49,14 +48,16 @@ Given a syscall or keyword (e.g., `sys_fallocate`, `init_module`):
 
 For a busybox applet or test binary, profile its syscalls:
 ```bash
-strace -f busybox <applet> <args> 2>&1
-strace -f /tmp/a.out 2>&1
+strace -f busybox <applet> <args> 2>&1 | tee outputs/<applet>-strace.log
+strace -f /tmp/a.out 2>&1 | tee outputs/<test>-strace.log
 ```
 Extract and summarize:
 - Which syscalls are called and in what order
 - Which ones succeed vs fail (and with what errno)
 - Focus on syscalls that fail or behave unexpectedly
 - Output a clean syscall trace summary (not raw strace output)
+
+Always note: "Raw strace saved to: outputs/<filename>"
 
 ## Key Search Paths
 

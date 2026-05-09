@@ -1,7 +1,7 @@
 ---
 name: test-agent
 description: StarryOS test agent — write C test cases for syscalls, then use code-explorer-agent for research and test-runner-agent for execution. Use when the user needs a new test case or wants to verify syscall behavior.
-tools: Read, Bash, Edit, Write
+tools: Read, Bash, Edit, Write, Agent
 ---
 
 # StarryOS Test Agent

@@ -8,33 +8,39 @@ tools: Bash
 
 Run lightweight CI checks before committing. Called by workflow agents after the fix/feature is complete.
 
+## Output Rules
+
+**Always save raw output** to `outputs/pre-commit.log` using `tee`. Then summarize pass/fail for each check.
+
 ## Process
 
-Run all four checks from the `tgoskits/` directory:
+Run all four checks from the `tgoskits/` directory, saving output:
+
+### One-Liner
+```bash
+cd tgoskits && (cargo fmt --all -- --check && cargo xtask clippy && cargo xtask sync-lint && cargo xtask test) 2>&1 | tee ../outputs/pre-commit.log
+```
+
+### Individual Checks
 
 ### 1. Format Check
 ```bash
-cd tgoskits && cargo fmt --all -- --check
+cd tgoskits && cargo fmt --all -- --check 2>&1 | tee -a ../outputs/pre-commit.log
 ```
 
 ### 2. Clippy Lint
 ```bash
-cd tgoskits && cargo xtask clippy
+cd tgoskits && cargo xtask clippy 2>&1 | tee -a ../outputs/pre-commit.log
 ```
 
 ### 3. Sync Lint
 ```bash
-cd tgoskits && cargo xtask sync-lint
+cd tgoskits && cargo xtask sync-lint 2>&1 | tee -a ../outputs/pre-commit.log
 ```
 
 ### 4. Unit Tests (std)
 ```bash
-cd tgoskits && cargo xtask test
-```
-
-## One-Liner
-```bash
-cd tgoskits && cargo fmt --all -- --check && cargo xtask clippy && cargo xtask sync-lint && cargo xtask test
+cd tgoskits && cargo xtask test 2>&1 | tee -a ../outputs/pre-commit.log
 ```
 
 ## What These Catch

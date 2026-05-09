@@ -31,8 +31,8 @@ cd tgoskits && git fetch upstream && git checkout dev && git rebase upstream/dev
 ```
 
 ### Step 3: Create Work Branch
-- Bugfix: `git checkout -b fix/<name>`
-- Feature: `git checkout -b feat/<name>`
+- Bugfix: `cd tgoskits && git checkout -b fix/<name>`
+- Feature: `cd tgoskits && git checkout -b feat/<name>`
 
 ### Checklist
 - Working tree clean
