@@ -76,9 +76,9 @@ Architecture: **Skills define step-by-step workflows. The main session calls sub
 
 All commands are executed from the `tgoskits/` directory.
 
-**Critical**: `cargo xtask starry` commands (build, test qemu) **must** run inside the Docker container `starryos-dev:ubuntu-qemu10.2.1`.
+**Critical**: All `cargo` commands that compile (clippy, test, xtask starry) **must** run inside the Docker container `starryos-dev:ubuntu-qemu10.2.1`. Docker builds write root-owned files to `target/`, so running outside Docker causes "Permission denied" errors.
 
-Commands that run directly on WSL (no Docker needed): `cargo fmt`, `cargo xtask clippy`, `cargo xtask sync-lint`, `cargo xtask test`, `gcc`, `busybox`, `sh`.
+Commands that run directly on WSL (no Docker needed): `cargo fmt --check` (no-compile), `gcc`, `busybox`, `sh`, `git`.
 
 ### Run a Single Test (Docker required)
 ```bash

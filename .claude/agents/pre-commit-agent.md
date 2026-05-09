@@ -14,33 +14,33 @@ Run lightweight CI checks before committing. Called by workflow agents after the
 
 ## Process
 
-Run all four checks from the `tgoskits/` directory, saving output:
+Run all four checks inside Docker to avoid `target/` permission conflicts (Docker builds write root-owned files). Save output to `outputs/pre-commit.log`.
 
 ### One-Liner
 ```bash
-cd tgoskits && (cargo fmt --all -- --check && cargo xtask clippy && cargo xtask sync-lint && cargo xtask test) 2>&1 | tee ../outputs/pre-commit.log
+cd tgoskits && docker run --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 sh -c '(cargo fmt --all -- --check && cargo xtask clippy && cargo xtask sync-lint && cargo xtask test) 2>&1' | tee ../outputs/pre-commit.log
 ```
 
-### Individual Checks
+### Individual Checks (all inside Docker)
 
 ### 1. Format Check
 ```bash
-cd tgoskits && cargo fmt --all -- --check 2>&1 | tee -a ../outputs/pre-commit.log
+cd tgoskits && docker run --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo fmt --all -- --check 2>&1 | tee -a ../outputs/pre-commit.log
 ```
 
 ### 2. Clippy Lint
 ```bash
-cd tgoskits && cargo xtask clippy 2>&1 | tee -a ../outputs/pre-commit.log
+cd tgoskits && docker run --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask clippy 2>&1 | tee -a ../outputs/pre-commit.log
 ```
 
 ### 3. Sync Lint
 ```bash
-cd tgoskits && cargo xtask sync-lint 2>&1 | tee -a ../outputs/pre-commit.log
+cd tgoskits && docker run --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask sync-lint 2>&1 | tee -a ../outputs/pre-commit.log
 ```
 
 ### 4. Unit Tests (std)
 ```bash
-cd tgoskits && cargo xtask test 2>&1 | tee -a ../outputs/pre-commit.log
+cd tgoskits && docker run --rm -v "$(pwd)":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask test 2>&1 | tee -a ../outputs/pre-commit.log
 ```
 
 ## What These Catch
