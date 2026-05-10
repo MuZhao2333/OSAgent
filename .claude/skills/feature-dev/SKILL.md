@@ -5,7 +5,7 @@ description: Develop a new StarryOS kernel feature. Follow step-by-step workflow
 
 # Feature Development Workflow
 
-Develop a new syscall or kernel feature for StarryOS. Call each sub-agent in order, save all outputs to `outputs/`.
+Develop a new syscall or kernel feature for StarryOS. Call each sub-agent in order, save all outputs to `outputs/feat-<feature-name>/`. Create the output directory before first use.
 
 ## Step 1: Git Setup
 
@@ -16,7 +16,7 @@ Agent(subagent_type="git-sync-agent", description="Sync git and create feat bran
 ## Step 2: Research Linux Behavior
 
 ```
-Agent(subagent_type="code-explorer-agent", description="Research Linux feature behavior", prompt="Research Linux behavior for <feature/syscall>. Read the man page, check Linux kernel source for edge cases. Return: signature, all error conditions with errno values, edge cases. Save to outputs/<feature>-research.log.")
+Agent(subagent_type="code-explorer-agent", description="Research Linux feature behavior", prompt="Research Linux behavior for <feature/syscall>. Read the man page, check Linux kernel source for edge cases. Return: signature, all error conditions with errno values, edge cases. Save to outputs/feat-<feature-name>/research.log.")
 ```
 
 ## Step 3: Design
@@ -46,7 +46,7 @@ pub fn sys_<name>(arg1: Type, arg2: Type) -> AxResult<isize> {
 ## Step 6: Build and Test
 
 ```
-Agent(subagent_type="test-runner-agent", description="Build and test in QEMU", prompt="Build and run test-<name> in Docker QEMU: cd tgoskits && docker run --rm -v \"$(pwd)\":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask starry test qemu --arch riscv64 -c <name> 2>&1 | tee outputs/<name>-qemu.log. Report PASS/FAIL summary.")
+Agent(subagent_type="test-runner-agent", description="Build and test in QEMU", prompt="Build and run test-<name> in Docker QEMU: cd tgoskits && docker run --rm -v \"$(pwd)\":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask starry test qemu --arch riscv64 -c <name> 2>&1 | tee ../outputs/feat-<feature-name>/qemu.log. Report PASS/FAIL summary.")
 ```
 
 Fix any discrepancies and re-run if needed.
@@ -54,12 +54,12 @@ Fix any discrepancies and re-run if needed.
 ## Step 7: Pre-Commit
 
 ```
-Agent(subagent_type="pre-commit-agent", description="Run pre-commit CI checks", prompt="Run cd tgoskits && (cargo fmt --all -- --check && cargo xtask clippy && cargo xtask sync-lint && cargo xtask test) 2>&1 | tee ../outputs/pre-commit.log. Report pass/fail for each check.")
+Agent(subagent_type="pre-commit-agent", description="Run pre-commit CI checks", prompt="Run cd tgoskits && (cargo fmt --all -- --check && cargo xtask clippy && cargo xtask sync-lint && cargo xtask test) 2>&1 | tee ../outputs/feat-<feature-name>/pre-commit.log. Report pass/fail for each check.")
 ```
 
 ## Step 8: Ship
 
 Commit the changes inside `tgoskits/`, then:
 ```
-Agent(subagent_type="pr-writer", description="Compose and open PR", prompt="Compose a feature PR for <feature-name>. Include: motivation, design, implementation details, test results from outputs/. Rebase onto upstream/dev, push, and create the PR via gh CLI targeting rcore-os/tgoskits dev branch.")
+Agent(subagent_type="pr-writer", description="Compose and open PR", prompt="Compose a feature PR for <feature-name>. Include: motivation, design, implementation details, test results from outputs/feat-<feature-name>/. Rebase onto upstream/dev, push, and create the PR via gh CLI targeting rcore-os/tgoskits dev branch.")
 ```
