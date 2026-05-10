@@ -104,3 +104,12 @@ gcc test-suit/starryos/normal/qemu-smp1/<test-name>/c/src/main.c -o /tmp/a.out &
 - **Linux parity**: StarryOS should match Linux syscall behavior (error codes, edge cases)
 - **PR structure**: Follow `templates/pr-bugfix.md` or `templates/pr-feature.md`. Never include AI-branding lines. Always fill in actual code diffs and test results from `outputs/`.
 - **Rust conventions**: `AxError::from(LinuxError::XXX)` for error mapping
+
+## Critical Rule: Fix the Kernel, Not the Test
+
+**Never modify a test case to make it pass.** The test cases from issue #13 are the source of truth — they define correct behavior. If a test fails, the bug is in the kernel, and the fix must be in the kernel code. Modifying tests to bypass failures is cheating and masks real bugs.
+
+- Test commands and verification patterns from issue #13 are authoritative
+- If a test command contains `...` as a placeholder, fill in only the minimal setup needed (e.g., creating test files), but do NOT change the applet invocation or verification logic
+- The goal is Linux parity: the same test should pass on both Linux and StarryOS
+- If a test passes on Linux but fails on StarryOS, there is a kernel bug to fix

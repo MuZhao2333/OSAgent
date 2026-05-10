@@ -31,6 +31,8 @@ Fetch https://github.com/rcore-os/linux-compatible-testsuit/issues/13, find the 
 
 **Critical**: The test command and verification must match the issue #13 entry **exactly**. Do not change, simplify, or "strengthen" the verification pattern — the issue is the source of truth.
 
+**The `...` placeholder**: Some test commands contain `...` (e.g., `busybox sh -c '... busybox lzma -kf ...'`). This represents minimal setup commands (creating temp files, directories). Replace `...` with only the setup needed to make the applet invocation work — do NOT change the applet command, its flags, or the verification logic. The goal is to test the applet as specified, not to redesign the test.
+
 The verification pattern dictates the `if` line in the script:
 - `grep -qF "X"` or `grep -qE "X"` → `if echo "$_t" | <verification>; then`
 - `[ -n "$_t" ]` → `if [ -n "$_t" ]; then`
@@ -54,11 +56,47 @@ The `<command>` inside the script must be byte-for-byte identical to the "测试
 Agent(subagent_type="test-runner-agent", description="Run busybox QEMU test", prompt="Build StarryOS and run the busybox test in Docker QEMU: cd tgoskits && docker run --rm -v \"$(pwd)\":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask starry test qemu --arch riscv64 -c busybox 2>&1 | tee ../outputs/busybox-<applet>/qemu-failure.log. Report PASS/FAIL for the <applet> test specifically.")
 ```
 
-## Step 6: Debug
+## Step 6: Debug — Multi-Phase
 
+**Do NOT delegate all debugging to a sub-agent.** The main session drives the investigation. code-explorer-agent is used only for narrow, targeted searches.
+
+### Step 6a: Run strace on Linux (WSL, no Docker)
+
+Run strace directly — this is fast and gives the baseline syscall trace:
+
+```bash
+strace -f busybox <applet> <args> 2>&1 | tee outputs/busybox-<applet>/strace.log
 ```
-Agent(subagent_type="code-explorer-agent", description="Profile and trace failure", prompt="1. Run strace on Linux: strace -f busybox <applet> <args> 2>&1 | tee ../outputs/busybox-<applet>/strace.log. 2. Identify which syscalls the applet calls. 3. Search StarryOS kernel at tgoskits/os/StarryOS/kernel/src/syscall/ for the implementation of those syscalls. 4. Trace each syscall from entry to return, noting missing implementation, wrong error codes, or logic errors. 5. Report: what specific changes are needed in which files.")
+
+If the busybox applet requires `-d` or special flags that aren't supported on WSL's busybox, run the test inside the QEMU environment to capture the actual behavior.
+
+### Step 6b: Read the Outputs and Identify Failing Syscalls
+
+**The main session reads these files directly:**
+1. `outputs/busybox-<applet>/qemu-failure.log` — the QEMU test output
+2. `outputs/busybox-<applet>/strace.log` — the Linux strace baseline
+3. Read the test command in the script to understand what the applet does
+
+From these, identify:
+- Which syscalls does the applet call? (from strace)
+- Which syscall is likely failing? (compare strace success vs QEMU failure)
+- What error does QEMU show?
+
+### Step 6c: Main Session Reads Kernel Code Directly
+
+**The main session reads the relevant kernel source files.** Do not delegate this. Use Read tool to examine:
+- The syscall entry in `tgoskits/os/StarryOS/kernel/src/syscall/mod.rs` (dispatch table)
+- The specific syscall implementation file (e.g., `syscall/fs/io.rs` for read/write)
+- Trace from syscall entry → validation → core logic → return
+
+### Step 6d: Targeted code-explorer Searches (only if needed)
+
+If the main session can't find something, use code-explorer-agent with a **narrow, specific question**:
 ```
+Agent(subagent_type="code-explorer-agent", description="Find specific implementation", prompt="In tgoskits/os/StarryOS/kernel/src/syscall/, find where sys_<name> is implemented. Report the file path, line numbers, and the function signature. Do NOT trace the full call path — just locate the entry point.")
+```
+
+Keep code-explorer tasks scoped to a single question. Multiple small calls are better than one big investigation.
 
 ## Step 7: Implement Fix
 
