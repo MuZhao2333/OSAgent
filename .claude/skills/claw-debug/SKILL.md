@@ -11,7 +11,7 @@ Iteratively fix StarryOS kernel issues blocking the `claw-code/integration` test
 ## Core Loop
 
 ```
-Run test (sub-agent) → Analyze failure (main session) → Trace & fix kernel (main session) → Repeat until PASS
+Run test (sub-agent) → Analyze failure (main session) → Trace & fix kernel (main session) → Record progress (main session) → Repeat until PASS
 ```
 
 Main session drives analysis and editing. Sub-agents only for running tests and targeted code lookups.
@@ -74,7 +74,20 @@ Agent(subagent_type="test-runner-agent", description="Verify fix in QEMU", promp
 - If fix doesn't work: analyze new output, go to Step 2
 - If fix causes regression: revert and try different approach
 
-## Step 6: Iterate
+## Step 6: Record Progress
+
+After each iteration (whether fix worked or not), append to `outputs/app-port-claw-code/progress.md`:
+
+```markdown
+- **2026-05-11 HH:MM** — Iteration #N. Test: integration-test-v<N>.log.
+  - Finding: <what was wrong>
+  - Fix: <what was changed, file path>
+  - Result: <PASS/FAIL — which test step>
+```
+
+Keep entries concise. This builds a complete debugging trail.
+
+## Step 7: Iterate
 
 Continue the loop until all tests pass with `ALL_TESTS_DONE`.
 
