@@ -51,6 +51,7 @@ Architecture: **Skills define step-by-step workflows. The main session calls sub
 | `busybox-fix` | Fix a busybox applet: fetch test → baseline → QEMU → strace → fix → verify → PR |
 | `debug-fix` | Fix a kernel bug: baseline → QEMU → trace → fix → verify → PR |
 | `feature-dev` | New feature: research → design → test → implement → verify → PR |
+| `app-port` | Port a large app: profile → plan → implement sub-goals incrementally → integrate → PR |
 
 ### Sub-Agents (called by main session at each step)
 
@@ -62,6 +63,7 @@ Architecture: **Skills define step-by-step workflows. The main session calls sub
 | `test-agent` | Write C test cases | — |
 | `pre-commit-agent` | Run fmt + clippy + sync-lint + std tests | `outputs/pre-commit.log` |
 | `pr-writer` | Compose PR, rebase, push, create PR | — |
+| `app-profiler-agent` | Profile target app, strace analysis, gap report vs StarryOS | `outputs/app-port-<name>/profile.log` |
 
 ### How It Works
 
