@@ -21,19 +21,20 @@ Main session drives analysis and editing. Sub-agents only for running tests and 
 Use the test-runner-agent to run the test in Docker QEMU:
 
 ```
-Agent(subagent_type="test-runner-agent", description="Run claw-code integration test", prompt="Build StarryOS and run the claw-code/integration test case in Docker QEMU. Command: cd tgoskits && docker run --rm -v \"$(pwd)\":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 bash -c \"rustup toolchain install nightly-2026-04-27 && cargo xtask starry test qemu --arch riscv64 -c claw-code/integration\" 2>&1 | tee ../outputs/app-port-claw-code/integration-test-v<N>.log. Increment N each run. Report: PASS/FAIL, which test step failed, and key output (exit codes, error messages).")
+Agent(subagent_type="test-runner-agent", description="Run claw-code integration test", prompt="Build StarryOS and run the claw-code/integration test case in Docker QEMU. Command: cd tgoskits && docker run --rm -v \"$(pwd)\":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask starry test qemu --arch x86_64 -c claw-code/integration 2>&1 | tee ../outputs/claw-debug/integration-test-v<N>.log. Increment N each run. Report: PASS/FAIL, which test step failed, and key output (exit codes, error messages).")
 ```
 
-The main session reads `outputs/app-port-claw-code/integration-test-v<N>.log` for detailed analysis.
+The main session reads `outputs/claw-debug/integration-test-v<N>.log` for detailed analysis.
 
 ## Step 2: Analyze Failure
 
 Read the test output log. Determine which test(s) failed:
 
-- **Smoke/Diagnostic failure** (steps 1-2): Binary can't start → basic syscall or ELF loading issue
-- **Network diagnostic failure** (steps 3-6): DNS/HTTP/HTTPS broken → network stack issue
-- **Functional failure EXIT:-1** (step 7): claw hangs at `Thinking...` → async I/O (epoll/tokio) issue
+- **Smoke/Diagnostic failure** (claw --help, claw version): Binary can't start → basic syscall or ELF loading issue
+- **Functional failure EXIT:-1** (claw prompt): claw hangs at `Thinking...` → async I/O (epoll/tokio) issue
 - **Functional failure non-zero exit**: claw crashed or returned error → check stderr output
+- **Tool failure** (bash/write): Tool execution broken → process/pipe/filesystem syscalls
+- **Project failure** (create file, C compile & run): Multi-step workflow broken → compound tool issue
 - **Kernel panic**: Check panic message for root cause
 
 ## Step 3: Trace Root Cause
@@ -67,7 +68,7 @@ Edit the relevant kernel source file(s) directly. Key constraints:
 Use the test-runner-agent again with incremented version number:
 
 ```
-Agent(subagent_type="test-runner-agent", description="Verify fix in QEMU", prompt="Build StarryOS and run the claw-code/integration test case in Docker QEMU (version N+1). Command: cd tgoskits && docker run --rm -v \"$(pwd)\":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 bash -c \"rustup toolchain install nightly-2026-04-27 && cargo xtask starry test qemu --arch riscv64 -c claw-code/integration\" 2>&1 | tee ../outputs/app-port-claw-code/integration-test-v<N+1>.log. Report: PASS/FAIL, which test step passed/failed, key output.")
+Agent(subagent_type="test-runner-agent", description="Verify fix in QEMU", prompt="Build StarryOS and run the claw-code/integration test case in Docker QEMU (version N+1). Command: cd tgoskits && docker run --rm -v \"$(pwd)\":/workspace -w /workspace starryos-dev:ubuntu-qemu10.2.1 cargo xtask starry test qemu --arch x86_64 -c claw-code/integration 2>&1 | tee ../outputs/claw-debug/integration-test-v<N+1>.log. Report: PASS/FAIL, which test step passed/failed, key output.")
 ```
 
 - If fix works: previously failing test now passes, continue to next failure
@@ -76,10 +77,10 @@ Agent(subagent_type="test-runner-agent", description="Verify fix in QEMU", promp
 
 ## Step 6: Record Progress
 
-After each iteration (whether fix worked or not), append to `outputs/app-port-claw-code/progress.md`:
+After each iteration (whether fix worked or not), append to `outputs/claw-debug/progress.md`:
 
 ```markdown
-- **2026-05-11 HH:MM** — Iteration #N. Test: integration-test-v<N>.log.
+- **2026-05-15 HH:MM** — Iteration #N. Test: integration-test-v<N>.log.
   - Finding: <what was wrong>
   - Fix: <what was changed, file path>
   - Result: <PASS/FAIL — which test step>
@@ -93,26 +94,14 @@ Continue the loop until all tests pass with `ALL_TESTS_DONE`.
 
 ### Test execution order (fail-fast):
 
-| Order | Test | Current Status |
-|-------|------|---------------|
-| 1 | Smoke: `claw --help` | PASS |
-| 2 | Diagnostic: `claw version` | PASS |
-| 3 | Network: resolv.conf | PASS |
-| 4 | Network: DNS lookup | PASS |
-| 5 | Network: HTTPS (wget) | PASS |
-| 6 | Network: HTTP (wget) | PASS |
-| 7 | Functional: `claw prompt 'hello'` | **FAIL** |
-| 8 | Tool: `claw --allowedTools bash prompt 'echo hello world'` | Blocked by #7 |
-| 9 | Project: `claw create file` | Blocked by #7 |
-| 10 | Project: `claw C compile & run` | Blocked by #7 |
+| Order | Test | Description |
+|-------|------|-------------|
+| 1 | Smoke: `claw --help` | Binary basic execution |
+| 2 | Diagnostic: `claw version` | Version info output |
+| 3 | Functional: claw prompt | LLM basic conversation (retry 3x) |
+| 4 | Tool: bash echo | Bash tool execution (retry 3x) |
+| 5 | Project: create file | Write tool + verification (retry 3x) |
+| 6 | Project: C compile & run | Full write-compile-run workflow (retry 3x) |
 
-## Known Issue: Async I/O
-
-The current blocker is async I/O (reqwest/tokio via epoll). Key files:
-
-- `tgoskits/os/arceos/modules/axnet-ng/src/device/ethernet.rs` — `register_waker()` is no-op without IRQ
-- `tgoskits/os/arceos/modules/axnet-ng/src/service.rs` — `register_waker()` may not set fallback poll timer
-- `tgoskits/os/StarryOS/kernel/src/syscall/io_mpx/epoll.rs` — epoll implementation
-- `tgoskits/os/StarryOS/kernel/src/file/epoll.rs` — epoll file operations
-
-Blocking I/O (wget) works. The fix must ensure epoll wakers are triggered when network data arrives, even without IRQ.
+Test config: `qemu-x86_64.toml`, x86_64 static-pie musl claw binary from GitHub Release.
+LLM backend: DeepSeek API (`deepseek-chat`) via Anthropic-compatible endpoint.
