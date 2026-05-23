@@ -71,8 +71,6 @@ timeout = 1800
 API_BASE_URL="https://api.deepseek.com/anthropic"
 API_AUTH_TOKEN="sk-e269d580c7174e2a99bb21d1626c38e3"
 API_MODEL="deepseek-chat"
-ENV="ANTHROPIC_BASE_URL=${API_BASE_URL} ANTHROPIC_AUTH_TOKEN=${API_AUTH_TOKEN} ANTHROPIC_MODEL=${API_MODEL}"
-
 # Setup fake git repo (claw requires it)
 mkdir -p /tmp/work/.git/refs/heads /tmp/work/.git/objects
 echo "ref: refs/heads/master" > /tmp/work/.git/HEAD
@@ -81,7 +79,11 @@ echo "	repositoryformatversion = 0" >> /tmp/work/.git/config
 echo "	bare = false" >> /tmp/work/.git/config
 
 echo "=== Robust-<NN>: <description> ==="
-cd /tmp/work && $ENV timeout 600 /usr/bin/claw --allowedTools bash,write prompt '<ESCAPED_PROMPT>' 2>&1
+cd /tmp/work && env \
+  ANTHROPIC_BASE_URL="${API_BASE_URL}" \
+  ANTHROPIC_AUTH_TOKEN="${API_AUTH_TOKEN}" \
+  ANTHROPIC_MODEL="${API_MODEL}" \
+  timeout 600 /usr/bin/claw --allowedTools bash,write prompt '<ESCAPED_PROMPT>' 2>&1
 EXIT_CODE=$?
 
 # Verification step: check expected output
@@ -96,6 +98,8 @@ fi
 ```
 
 **IMPORTANT**: Escape single quotes in the prompt by replacing `'` with `'\''`.
+
+**IMPORTANT**: Claw runs with sandbox workspace at `/tmp/work/`. Use workspace-relative paths in prompts (e.g., `digest.md`) and check files at their actual workspace path (e.g., `/tmp/work/digest.md`) in verification. Never use `/tmp/` paths in prompts — claw will reject them as escaping the workspace boundary.
 
 The main session writes these files directly. After creating the test case, inject the shell script into the rootfs:
 
